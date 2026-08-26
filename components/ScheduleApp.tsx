@@ -318,20 +318,20 @@ function AddItemForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="What's happening?"
-        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <div className="flex gap-2">
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <input
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
