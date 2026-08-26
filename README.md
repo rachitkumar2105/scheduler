@@ -23,7 +23,7 @@ The subject line always uses the item's **exact title** — never AI-paraphrased
 - **Database:** Neon (serverless Postgres)
 - **Email:** Resend, with optional Groq-generated short one-line body (falls back to a plain static line if Groq is unset or fails — email delivery never depends on it). Two Groq API keys can be configured; if the first one's calls start failing (e.g. quota exhausted), the app automatically retries with the second.
 - **Scheduler:** an external cron service hits `/api/cron/reminders` every 5 minutes; Vercel's built-in Cron handles the once-daily 8 AM digest
-- **Auth:** none — the app is open to anyone with the URL. Fine for a personal tool with an unguessable/unshared link; don't post the URL publicly.
+- **Auth:** a single shared passphrase (no accounts) — see below
 - **Timezone:** all scheduling and display uses IST (Asia/Kolkata)
 
 ## Why reminders don't use Vercel Cron
@@ -45,7 +45,7 @@ Vercel's free Hobby plan only allows cron jobs to run **once per day** — a 5-m
    ```bash
    npm run dev
    ```
-5. Open http://localhost:3000.
+5. Open http://localhost:3000 — you'll be asked for the passphrase you set as `APP_PASSWORD`.
 
 ## Environment variables
 
@@ -59,6 +59,7 @@ See `.env.example` for the full list with comments. Summary:
 | `REMINDER_FROM_EMAIL` | Leave as the default `onboarding@resend.dev` unless you've verified your own domain in Resend |
 | `GROQ_API_KEY` | Optional. console.groq.com → API Keys. Writes the short one-line email body; omit it and a static line is used instead |
 | `GROQ_API_KEY_2` | Optional second Groq key, used automatically if the first one's calls start failing |
+| `APP_PASSWORD` | Any passphrase you choose — required once per browser to view/edit your schedule |
 | `CRON_SECRET` | Any random string you generate (`openssl rand -base64 32`) — authenticates cron requests |
 
 ## Deploying to Vercel
@@ -71,7 +72,7 @@ See `.env.example` for the full list with comments. Summary:
    ```bash
    node --env-file=.env.production.local scripts/init-db.mjs
    ```
-6. Visit your deployed URL to confirm it works.
+6. Visit your deployed URL and log in with your `APP_PASSWORD` to confirm it works.
 
 ### Setting up the 5-minute reminder check (cron-job.org)
 
@@ -102,18 +103,22 @@ Each schedule item can trigger at most one email per interval it's configured wi
 ```
 app/
   page.tsx                  Main list + add form (server component)
+  login/page.tsx            Passphrase entry
   api/items/route.ts        GET list, POST create
-  api/items/[id]/route.ts   DELETE
+  api/items/[id]/route.ts   DELETE, PATCH (priority)
+  api/login/route.ts        Verifies passphrase, sets session cookie
   api/cron/reminders/route.ts  Checks each item's own reminder intervals, sends due emails, deletes past events
   api/cron/digest/route.ts     Sends the once-daily 8 AM IST digest
 components/
-  ScheduleApp.tsx            Client-side UI: header, next-up card, tabs, add form, item list
+  ScheduleApp.tsx            Client-side UI: header, next-up card, tabs, add form, item list, plan view
 lib/
   db.ts                      Neon queries
   email.ts                   Resend sending + subject/body composition
   groq.ts                    Optional AI-generated short email body, with 2-key fallback
-  constants.ts                Reminder interval options + labels (shared by backend and UI)
+  constants.ts                Reminder interval, priority options + labels (shared by backend and UI)
   time.ts                    IST <-> UTC conversion helpers
+  auth.ts                    Session cookie hashing
+proxy.ts                     Auth gate (Next.js 16 middleware convention)
 db/schema.sql                Table definitions
 scripts/init-db.mjs          One-time schema setup script
 vercel.json                  Digest cron schedule
