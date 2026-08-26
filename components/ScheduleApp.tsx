@@ -115,7 +115,7 @@ function Header({ emailConfigured }: { emailConfigured: boolean }) {
           ⏰
         </div>
         <div>
-          <h1 className="text-lg font-bold text-slate-900 leading-tight">Remindly</h1>
+          <h1 className="text-lg font-bold text-slate-900 leading-tight">Scheduler</h1>
           <p className="text-xs text-slate-400">Asia/Kolkata · IST</p>
         </div>
       </div>

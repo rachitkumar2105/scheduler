@@ -1,4 +1,4 @@
-# Remindly
+# Scheduler
 
 A personal schedule + email reminder app. Add exams, deadlines, and meetings; get emailed automatically before each one, plus a daily 8:00 AM IST digest.
 
