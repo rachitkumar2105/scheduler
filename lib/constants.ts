@@ -17,3 +17,19 @@ export const INTERVAL_LABELS: Record<number, string> = {
   30: "30m",
   15: "15m",
 };
+
+export const PRIORITIES = ["low", "medium", "high"] as const;
+export type Priority = (typeof PRIORITIES)[number];
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+/** Higher weight pulls an item earlier in the suggested plan, deadline held equal. */
+export const PRIORITY_WEIGHT: Record<Priority, number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+};

@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import type { Priority } from "./constants";
 
 export const sql = neon(process.env.DATABASE_URL!);
 
@@ -9,6 +10,7 @@ export type ScheduleItem = {
   created_at: string;
   reminder_intervals: number[];
   sent_intervals: number[];
+  priority: Priority;
 };
 
 export type DigestItem = {
@@ -20,7 +22,7 @@ export type DigestItem = {
 export async function listUpcomingItems(): Promise<ScheduleItem[]> {
   const rows = await sql`
     SELECT
-      si.id, si.title, si.event_datetime, si.created_at, si.reminder_intervals,
+      si.id, si.title, si.event_datetime, si.created_at, si.reminder_intervals, si.priority,
       COALESCE(
         (SELECT array_agg(rl.interval_minutes ORDER BY rl.interval_minutes)
          FROM reminder_log rl WHERE rl.item_id = si.id),
@@ -36,18 +38,23 @@ export async function listUpcomingItems(): Promise<ScheduleItem[]> {
 export async function createItem(
   title: string,
   eventDatetimeUtc: string,
-  reminderIntervals: number[]
+  reminderIntervals: number[],
+  priority: Priority
 ): Promise<ScheduleItem> {
   const rows = await sql`
-    INSERT INTO schedule_items (title, event_datetime, reminder_intervals)
-    VALUES (${title}, ${eventDatetimeUtc}, ${reminderIntervals}::int[])
-    RETURNING id, title, event_datetime, created_at, reminder_intervals
+    INSERT INTO schedule_items (title, event_datetime, reminder_intervals, priority)
+    VALUES (${title}, ${eventDatetimeUtc}, ${reminderIntervals}::int[], ${priority})
+    RETURNING id, title, event_datetime, created_at, reminder_intervals, priority
   `;
   return { ...(rows[0] as Omit<ScheduleItem, "sent_intervals">), sent_intervals: [] };
 }
 
 export async function deleteItem(id: number): Promise<void> {
   await sql`DELETE FROM schedule_items WHERE id = ${id}`;
+}
+
+export async function updateItemPriority(id: number, priority: Priority): Promise<void> {
+  await sql`UPDATE schedule_items SET priority = ${priority} WHERE id = ${id}`;
 }
 
 /** Removes events that finished a while ago. reminder_log rows cascade-delete with them. */

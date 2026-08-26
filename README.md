@@ -9,6 +9,10 @@ Each item picks one of two modes when you add it:
 - **Automatic** (default): 24h, 12h, 6h, 2h, 1h, 30m before
 - **Custom**: pick any subset of 48h, 24h, 12h, 6h, 3h, 1h, 30m, 15m (up to all 8)
 
+## Priority and the Plan tab
+
+Every item has a priority — Low, Medium, or High — set when you add it and editable any time afterward from its card. The **Plan** tab uses it to suggest a working order: items are ranked by `minutes remaining ÷ priority weight` (High = ×3, Medium = ×2, Low = ×1), so a High-priority item pulls earlier even if a lower-priority one is nominally more imminent, without ever ignoring a genuinely close deadline. It's a deterministic ranking, not an AI suggestion — reliable and instant, no extra API calls.
+
 ## Email subjects
 
 The subject line always uses the item's **exact title** — never AI-paraphrased — plus how much time is left, e.g. `Google Form — 2h left! Hurry.` or `DBMS Exam — 24h left`. That way a glance at the inbox (or notification banner) tells you exactly what's due and how urgent it is, without opening the email. Only the one-line body underneath is optionally written by AI.

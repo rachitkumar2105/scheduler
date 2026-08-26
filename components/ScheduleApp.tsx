@@ -3,9 +3,30 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ScheduleItem } from "@/lib/db";
 import { formatIst, istDateString, todayIstDateString } from "@/lib/time";
-import { DEFAULT_REMINDER_INTERVALS, CUSTOM_REMINDER_OPTIONS, INTERVAL_LABELS } from "@/lib/constants";
+import {
+  DEFAULT_REMINDER_INTERVALS,
+  CUSTOM_REMINDER_OPTIONS,
+  INTERVAL_LABELS,
+  PRIORITIES,
+  PRIORITY_LABELS,
+  PRIORITY_WEIGHT,
+  type Priority,
+} from "@/lib/constants";
 
-type Tab = "today" | "upcoming" | "all";
+type Tab = "today" | "upcoming" | "all" | "plan";
+
+const TAB_LABELS: Record<Tab, string> = {
+  today: "Today",
+  upcoming: "Upcoming",
+  all: "All",
+  plan: "Plan",
+};
+
+const PRIORITY_STYLE: Record<Priority, string> = {
+  low: "bg-slate-100 text-slate-500 border-slate-200",
+  medium: "bg-blue-50 text-blue-700 border-blue-200",
+  high: "bg-rose-50 text-rose-700 border-rose-200",
+};
 
 export default function ScheduleApp({
   initialItems,
@@ -26,13 +47,14 @@ export default function ScheduleApp({
   }, []);
 
   const sorted = useMemo(
-    () => [...items].sort((a, b) => a.event_datetime.localeCompare(b.event_datetime)),
+    () => [...items].sort((a, b) => new Date(a.event_datetime).getTime() - new Date(b.event_datetime).getTime()),
     [items]
   );
 
   const today = todayIstDateString();
   const todayItems = sorted.filter((i) => istDateString(i.event_datetime) === today);
-  const visibleItems = tab === "today" ? todayItems : tab === "upcoming" ? sorted.filter((i) => istDateString(i.event_datetime) !== today) : sorted;
+  const visibleItems =
+    tab === "today" ? todayItems : tab === "upcoming" ? sorted.filter((i) => istDateString(i.event_datetime) !== today) : sorted;
 
   const nextUp = sorted[0];
 
@@ -43,6 +65,10 @@ export default function ScheduleApp({
 
   function handleDeleted(id: number) {
     setItems((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  function handlePriorityChanged(id: number, priority: Priority) {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, priority } : i)));
   }
 
   return (
@@ -66,25 +92,25 @@ export default function ScheduleApp({
           </div>
         )}
 
-        <div className="px-4 pt-5 flex items-center gap-2">
-          <div className="flex-1 flex bg-slate-100 rounded-full p-1">
-            {(["today", "upcoming", "all"] as Tab[]).map((t) => (
+        <div className="px-4 pt-5">
+          <div className="flex bg-slate-100 rounded-full p-1">
+            {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 text-sm font-medium py-2 rounded-full capitalize transition ${
+                className={`flex-1 text-xs sm:text-sm font-medium py-2 rounded-full transition ${
                   tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
                 }`}
               >
-                {t}
+                {TAB_LABELS[t]}
               </button>
             ))}
           </div>
           <button
             onClick={() => setShowAdd((v) => !v)}
-            className="shrink-0 flex items-center gap-1 bg-blue-600 text-white text-sm font-medium pl-3 pr-4 py-2.5 rounded-full active:bg-blue-700"
+            className="w-full mt-2 flex items-center justify-center gap-1 bg-blue-600 text-white text-sm font-medium py-2.5 rounded-full active:bg-blue-700"
           >
-            <span className="text-lg leading-none">+</span> New
+            <span className="text-lg leading-none">+</span> New item
           </button>
         </div>
 
@@ -94,13 +120,24 @@ export default function ScheduleApp({
           </div>
         )}
 
-        <div className="px-4 pt-4 space-y-3">
-          {visibleItems.length === 0 && (
-            <p className="text-center text-slate-400 py-12 text-sm">Nothing here.</p>
+        <div className="px-4 pt-4">
+          {tab === "plan" ? (
+            <PlanView items={sorted} />
+          ) : (
+            <div className="space-y-3">
+              {visibleItems.length === 0 && (
+                <p className="text-center text-slate-400 py-12 text-sm">Nothing here.</p>
+              )}
+              {visibleItems.map((item) => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  onDeleted={handleDeleted}
+                  onPriorityChanged={handlePriorityChanged}
+                />
+              ))}
+            </div>
           )}
-          {visibleItems.map((item) => (
-            <ItemRow key={item.id} item={item} onDeleted={handleDeleted} />
-          ))}
         </div>
       </div>
     </div>
@@ -142,6 +179,39 @@ function formatRemaining(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return (
+    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${PRIORITY_STYLE[priority]}`}>
+      {PRIORITY_LABELS[priority]}
+    </span>
+  );
+}
+
+function PriorityPicker({
+  value,
+  onChange,
+}: {
+  value: Priority;
+  onChange: (p: Priority) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {PRIORITIES.map((p) => (
+        <button
+          type="button"
+          key={p}
+          onClick={() => onChange(p)}
+          className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition ${
+            value === p ? PRIORITY_STYLE[p] + " ring-2 ring-offset-1 ring-blue-200" : "bg-white text-slate-400 border-slate-200"
+          }`}
+        >
+          {PRIORITY_LABELS[p]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function NextUpCard({ item }: { item: ScheduleItem }) {
   const remaining = minutesRemaining(item.event_datetime);
   const pending = item.reminder_intervals.filter((iv) => !item.sent_intervals.includes(iv));
@@ -152,8 +222,11 @@ function NextUpCard({ item }: { item: ScheduleItem }) {
 
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-blue-100/60 p-5">
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 tracking-wide uppercase">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Next up
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 tracking-wide uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Next up
+        </div>
+        <PriorityBadge priority={item.priority} />
       </div>
       <h2 className="text-xl font-bold text-slate-900 mt-1.5">{item.title}</h2>
       <p className="text-sm text-slate-400 mt-0.5">{formatIst(item.event_datetime)}</p>
@@ -197,8 +270,17 @@ function ReminderChip({ interval, sent, isNext }: { interval: number; sent: bool
   return <span className={`${base} ${style}`}>{INTERVAL_LABELS[interval] ?? `${interval}m`}</span>;
 }
 
-function ItemRow({ item, onDeleted }: { item: ScheduleItem; onDeleted: (id: number) => void }) {
+function ItemRow({
+  item,
+  onDeleted,
+  onPriorityChanged,
+}: {
+  item: ScheduleItem;
+  onDeleted: (id: number) => void;
+  onPriorityChanged: (id: number, priority: Priority) => void;
+}) {
   const [deleting, setDeleting] = useState(false);
+  const [savingPriority, setSavingPriority] = useState(false);
   const remaining = minutesRemaining(item.event_datetime);
   const urgency = remaining < 60 ? "red" : remaining < 360 ? "amber" : "emerald";
   const pillStyle = {
@@ -218,6 +300,21 @@ function ItemRow({ item, onDeleted }: { item: ScheduleItem; onDeleted: (id: numb
       onDeleted(item.id);
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handlePriorityChange(priority: Priority) {
+    if (priority === item.priority) return;
+    setSavingPriority(true);
+    try {
+      const res = await fetch(`/api/items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority }),
+      });
+      if (res.ok) onPriorityChanged(item.id, priority);
+    } finally {
+      setSavingPriority(false);
     }
   }
 
@@ -249,13 +346,63 @@ function ItemRow({ item, onDeleted }: { item: ScheduleItem; onDeleted: (id: numb
           </button>
         </div>
       </div>
+
       <div className="border-t border-slate-50 mt-3 pt-2.5">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Priority</p>
+        <fieldset disabled={savingPriority}>
+          <PriorityPicker value={item.priority} onChange={handlePriorityChange} />
+        </fieldset>
+      </div>
+
+      <div className="border-t border-slate-50 mt-2.5 pt-2.5">
         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Reminders</p>
         <div className="flex flex-wrap gap-1.5">
           {sortedIntervals.map((iv) => (
             <ReminderChip key={iv} interval={iv} sent={item.sent_intervals.includes(iv)} isNext={iv === nextInterval} />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Suggested working order: soonest-deadline-weighted-by-priority first. */
+function planRank(items: ScheduleItem[]): ScheduleItem[] {
+  return [...items].sort((a, b) => {
+    const scoreA = minutesRemaining(a.event_datetime) / PRIORITY_WEIGHT[a.priority];
+    const scoreB = minutesRemaining(b.event_datetime) / PRIORITY_WEIGHT[b.priority];
+    return scoreA - scoreB;
+  });
+}
+
+function PlanView({ items }: { items: ScheduleItem[] }) {
+  const ranked = useMemo(() => planRank(items), [items]);
+
+  if (ranked.length === 0) {
+    return <p className="text-center text-slate-400 py-12 text-sm">Add items to see a suggested plan.</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-xs text-slate-400 mb-3">
+        Suggested order — combines priority and deadline. Work top to bottom.
+      </p>
+      <div className="space-y-2.5">
+        {ranked.map((item, idx) => (
+          <div key={item.id} className="flex items-center gap-3 bg-white rounded-2xl border border-slate-100 px-4 py-3">
+            <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+              {idx + 1}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-slate-900 truncate">{item.title}</p>
+              <p className="text-xs text-slate-400">{formatIst(item.event_datetime)}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <PriorityBadge priority={item.priority} />
+              <span className="text-xs text-slate-400">in {formatRemaining(minutesRemaining(item.event_datetime))}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -273,6 +420,7 @@ function AddItemForm({
   const [time, setTime] = useState("");
   const [mode, setMode] = useState<"auto" | "custom">("auto");
   const [customIntervals, setCustomIntervals] = useState<number[]>([1440, 60]);
+  const [priority, setPriority] = useState<Priority>("medium");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -296,7 +444,7 @@ function AddItemForm({
       const res = await fetch("/api/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, date, time, mode, intervals: customIntervals }),
+        body: JSON.stringify({ title, date, time, mode, intervals: customIntervals, priority }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -336,6 +484,12 @@ function AddItemForm({
       </div>
 
       <div>
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Priority</p>
+        <PriorityPicker value={priority} onChange={setPriority} />
+      </div>
+
+      <div>
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Reminders</p>
         <div className="flex bg-slate-100 rounded-full p-1 text-sm">
           <button
             type="button"

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createItem, listUpcomingItems } from "@/lib/db";
 import { istInputsToUtcIso } from "@/lib/time";
-import { DEFAULT_REMINDER_INTERVALS, CUSTOM_REMINDER_OPTIONS } from "@/lib/constants";
+import { DEFAULT_REMINDER_INTERVALS, CUSTOM_REMINDER_OPTIONS, PRIORITIES } from "@/lib/constants";
 
 export async function GET() {
   const items = await listUpcomingItems();
@@ -9,7 +9,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { title, date, time, mode, intervals } = await req.json();
+  const { title, date, time, mode, intervals, priority } = await req.json();
 
   if (!title || typeof title !== "string" || !title.trim()) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -32,7 +32,9 @@ export async function POST(req: NextRequest) {
     reminderIntervals = DEFAULT_REMINDER_INTERVALS;
   }
 
+  const priorityValue = PRIORITIES.includes(priority) ? priority : "medium";
+
   const eventDatetimeUtc = istInputsToUtcIso(date, time);
-  const item = await createItem(title.trim(), eventDatetimeUtc, reminderIntervals);
+  const item = await createItem(title.trim(), eventDatetimeUtc, reminderIntervals, priorityValue);
   return NextResponse.json(item, { status: 201 });
 }

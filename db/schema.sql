@@ -3,10 +3,12 @@ CREATE TABLE IF NOT EXISTS schedule_items (
   title TEXT NOT NULL,
   event_datetime TIMESTAMPTZ NOT NULL,
   reminder_intervals INTEGER[] NOT NULL DEFAULT ARRAY[1440,720,360,120,60,30],
+  priority TEXT NOT NULL DEFAULT 'medium',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS reminder_intervals INTEGER[] NOT NULL DEFAULT ARRAY[1440,720,360,120,60,30];
+ALTER TABLE schedule_items ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'medium';
 
 CREATE INDEX IF NOT EXISTS idx_schedule_items_event_datetime ON schedule_items (event_datetime);
 
