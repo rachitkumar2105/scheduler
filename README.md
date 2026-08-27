@@ -9,6 +9,8 @@ Each item picks one of two modes when you add it:
 - **Automatic** (default): 24h, 12h, 6h, 2h, 1h, 30m before
 - **Custom**: pick any subset of 48h, 24h, 12h, 6h, 3h, 1h, 30m, 15m (up to all 8)
 
+If an item is added with less lead time than its largest interval (e.g. only 5h left when 24h/12h/6h are configured), or if the reminders cron didn't run for a while, those "already past" slots don't just get silently dropped. The next cron run collapses them into a single catch-up email reporting the *actual* time left — e.g. "Practical training — 17h 43m left" instead of a stale "24h left" — and the smaller intervals still ahead (2h, 1h, 30m) keep firing normally at their exact moments.
+
 ## Priority and the Plan tab
 
 Every item has a priority — Low, Medium, or High — set when you add it and editable any time afterward from its card. The **Plan** tab uses it to suggest a working order: items are ranked by `minutes remaining ÷ priority weight` (High = ×3, Medium = ×2, Low = ×1), so a High-priority item pulls earlier even if a lower-priority one is nominally more imminent, without ever ignoring a genuinely close deadline. It's a deterministic ranking, not an AI suggestion — reliable and instant, no extra API calls.

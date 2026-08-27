@@ -9,20 +9,42 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.REMINDER_FROM_EMAIL || "Schedule Reminder <onboarding@resend.dev>";
 const TO = process.env.REMINDER_TO_EMAIL!;
 
+/** e.g. 305 minutes -> "5h 5m"; whole hours drop the minutes. */
+function formatMinutesLabel(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (h === 0) return `${mm}m`;
+  if (mm === 0) return `${h}h`;
+  return `${h}h ${mm}m`;
+}
+
 /**
  * The subject always uses the item's exact title — never AI-paraphrased —
  * so a glance at the inbox tells you exactly what's due and how soon.
  * e.g. "Google Form — 2h left! Hurry." / "DBMS Exam — 24h left"
  */
-function buildSubject(title: string, intervalMinutes: number): string {
-  const label = INTERVAL_LABELS[intervalMinutes] ?? `${intervalMinutes}m`;
-  return intervalMinutes <= 60 ? `${title} — ${label} left! Hurry.` : `${title} — ${label} left`;
+function buildSubject(title: string, minutesLeft: number, label: string): string {
+  return minutesLeft <= 60 ? `${title} — ${label} left! Hurry.` : `${title} — ${label} left`;
 }
 
-export async function sendReminderEmail(item: { title: string; event_datetime: string }, intervalMinutes: number) {
-  const label = INTERVAL_LABELS[intervalMinutes] ?? `${intervalMinutes}m`;
+/**
+ * intervalMinutes is always the reminder slot being claimed (for de-dup).
+ * When catchUpRemainingMinutes is set, this slot's own threshold was already
+ * crossed before the cron caught it (item added with less lead time than
+ * this interval, or a cron gap) — the email reports the real time left
+ * instead of falsely claiming the stale interval's label.
+ */
+export async function sendReminderEmail(
+  item: { title: string; event_datetime: string },
+  intervalMinutes: number,
+  catchUpRemainingMinutes?: number
+) {
+  const isCatchUp = catchUpRemainingMinutes !== undefined;
+  const minutesLeft = isCatchUp ? catchUpRemainingMinutes! : intervalMinutes;
+  const label = isCatchUp ? formatMinutesLabel(minutesLeft) : INTERVAL_LABELS[intervalMinutes] ?? `${intervalMinutes}m`;
   const when = `${formatIst(item.event_datetime)} IST`;
-  const subject = buildSubject(item.title, intervalMinutes);
+  const subject = buildSubject(item.title, minutesLeft, label);
 
   const aiBody = await craftReminderBody(`Event "${item.title}" starts in ${label}, at ${when}.`);
   const bodyLine = aiBody || `Happening in ${label} — at ${when}.`;

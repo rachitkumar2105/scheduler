@@ -67,20 +67,34 @@ export async function deletePastItems(): Promise<number> {
   return rows.length;
 }
 
-export type DueReminder = { id: number; title: string; event_datetime: string; interval_minutes: number };
+export type PendingReminderState = {
+  id: number;
+  title: string;
+  event_datetime: string;
+  remaining_minutes: number;
+  pending: number[];
+};
 
-export async function getDueReminders(windowMinutes: number): Promise<DueReminder[]> {
+/** For every upcoming item, its not-yet-sent reminder intervals and live minutes-until-event. */
+export async function getPendingReminderState(): Promise<PendingReminderState[]> {
   const rows = await sql`
-    SELECT si.id, si.title, si.event_datetime, iv AS interval_minutes
-    FROM schedule_items si, unnest(si.reminder_intervals) AS iv
+    SELECT
+      si.id, si.title, si.event_datetime,
+      EXTRACT(EPOCH FROM (si.event_datetime - now())) / 60 AS remaining_minutes,
+      COALESCE(
+        (SELECT array_agg(iv ORDER BY iv)
+         FROM unnest(si.reminder_intervals) AS iv
+         WHERE NOT EXISTS (
+           SELECT 1 FROM reminder_log rl WHERE rl.item_id = si.id AND rl.interval_minutes = iv
+         )),
+        '{}'
+      ) AS pending
+    FROM schedule_items si
     WHERE si.event_datetime > now()
-      AND si.event_datetime <= now() + (iv * interval '1 minute')
-      AND si.event_datetime > now() + ((iv - ${windowMinutes}::int) * interval '1 minute')
-      AND NOT EXISTS (
-        SELECT 1 FROM reminder_log rl WHERE rl.item_id = si.id AND rl.interval_minutes = iv
-      )
   `;
-  return rows as DueReminder[];
+  return (rows as { id: number; title: string; event_datetime: string; remaining_minutes: string; pending: number[] }[]).map(
+    (r) => ({ ...r, remaining_minutes: Number(r.remaining_minutes) })
+  );
 }
 
 export async function tryClaimReminder(itemId: number, intervalMinutes: number): Promise<boolean> {
