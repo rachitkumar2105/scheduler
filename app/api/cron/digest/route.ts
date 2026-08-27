@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getItemsForDigest, getItemsNext24Hours, tryClaimDigest } from "@/lib/db";
+import { getTodayDigestItems, getUpcoming48hDigestItems, tryClaimDigest } from "@/lib/db";
 import { sendDigestEmail } from "@/lib/email";
 import { todayIstDateString } from "@/lib/time";
 
-// Scheduled for 08:00 IST daily (see vercel.json — 02:30 UTC).
+// Scheduled for 09:00 IST daily (see vercel.json — 03:30 UTC).
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -16,11 +16,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "already sent today" });
   }
 
-  const todayItems = await getItemsForDigest();
-  const isToday = todayItems.length > 0;
-  const items = isToday ? todayItems : await getItemsNext24Hours();
+  const [todayItems, upcoming48hItems] = await Promise.all([getTodayDigestItems(), getUpcoming48hDigestItems()]);
 
-  await sendDigestEmail(items, isToday);
+  await sendDigestEmail(todayItems, upcoming48hItems);
 
-  return NextResponse.json({ ok: true, count: items.length, isToday });
+  return NextResponse.json({ ok: true, todayCount: todayItems.length, upcoming48hCount: upcoming48hItems.length });
 }

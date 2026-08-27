@@ -22,32 +22,26 @@ export async function GET(req: NextRequest) {
     if (item.pending.length === 0) continue;
     const remaining = item.remaining_minutes;
 
-    // Crossed within this cron cadence — fires with its own exact label (e.g. "2h left").
-    const fresh = item.pending.filter((iv) => remaining <= iv && remaining > iv - WINDOW_MINUTES);
-    // Crossed a while ago — item was added with less lead time than this slot,
-    // or a cron gap let it slip. Collapse into one accurate catch-up email
-    // instead of staying silently unsent forever.
-    const stale = item.pending.filter((iv) => remaining <= iv - WINDOW_MINUTES);
+    // Every interval whose threshold has already been reached, whether it
+    // crossed just now (normal case) or a while ago (item added with less
+    // lead time than this slot, or a cron gap). At most ONE email per item
+    // per run: the smallest crossed interval is the most relevant one right
+    // now, and it absorbs every other crossed-but-unsent interval silently.
+    const crossed = item.pending.filter((iv) => remaining <= iv);
+    if (crossed.length === 0) continue;
 
-    for (const iv of fresh) {
-      const claimed = await tryClaimReminder(item.id, iv);
-      if (!claimed) continue;
-      await sendReminderEmail(item, iv);
+    const pick = Math.min(...crossed);
+    const claimed = await tryClaimReminder(item.id, pick);
+    if (claimed) {
+      // Close to its own exact mark -> use the clean label ("2h left").
+      // Crossed well before this run -> report the real time left instead.
+      const isFresh = pick - remaining <= WINDOW_MINUTES;
+      await sendReminderEmail(item, pick, isFresh ? undefined : remaining);
       sent++;
     }
 
-    if (stale.length > 0) {
-      const pick = Math.min(...stale);
-      const claimed = await tryClaimReminder(item.id, pick);
-      if (claimed) {
-        await sendReminderEmail(item, pick, remaining);
-        sent++;
-      }
-      // The rest are superseded by the single catch-up email above — claim
-      // them silently so they don't each re-trigger their own catch-up.
-      for (const iv of stale) {
-        if (iv !== pick) await tryClaimReminder(item.id, iv);
-      }
+    for (const iv of crossed) {
+      if (iv !== pick) await tryClaimReminder(item.id, iv);
     }
   }
 

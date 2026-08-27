@@ -82,7 +82,7 @@ export default function ScheduleApp({
             {todayItems.length === 0
               ? "Nothing today"
               : `${todayItems.length} item${todayItems.length > 1 ? "s" : ""} today`}
-            {" — digest at 8:00 AM"}
+            {" — digest at 9:00 AM"}
           </p>
         </div>
 

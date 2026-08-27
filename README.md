@@ -1,6 +1,6 @@
 # Scheduler
 
-A personal schedule + email reminder app. Add exams, deadlines, and meetings; get emailed automatically before each one, plus a daily 8:00 AM IST digest.
+A personal schedule + email reminder app. Add exams, deadlines, and meetings; get emailed automatically before each one, plus a daily 9:00 AM IST digest.
 
 ## Reminder intervals
 
@@ -9,7 +9,7 @@ Each item picks one of two modes when you add it:
 - **Automatic** (default): 24h, 12h, 6h, 2h, 1h, 30m before
 - **Custom**: pick any subset of 48h, 24h, 12h, 6h, 3h, 1h, 30m, 15m (up to all 8)
 
-If an item is added with less lead time than its largest interval (e.g. only 5h left when 24h/12h/6h are configured), or if the reminders cron didn't run for a while, those "already past" slots don't just get silently dropped. The next cron run collapses them into a single catch-up email reporting the *actual* time left — e.g. "Practical training — 17h 43m left" instead of a stale "24h left" — and the smaller intervals still ahead (2h, 1h, 30m) keep firing normally at their exact moments.
+If an item is added with less lead time than its largest interval (e.g. only 5h left when 24h/12h/6h are configured), or if the reminders cron didn't run for a while, those "already past" slots don't just get silently dropped — but they also don't each send their own email. Every cron run sends **at most one** email per item: the smallest crossed-but-unsent interval. If it crossed within this run it uses its own clean label ("2h left"); if it crossed earlier (item added late, or a cron gap) it reports the real time left instead ("17h 43m left"). Every other crossed interval for that item is silently marked sent in the same pass, so you never get a pile of redundant catch-up emails for one item at once — and the smaller intervals still ahead (2h, 1h, 30m) keep firing normally at their exact moments.
 
 ## Priority and the Plan tab
 
@@ -17,14 +17,18 @@ Every item has a priority — Low, Medium, or High — set when you add it and e
 
 ## Email subjects
 
-The subject line always uses the item's **exact title** — never AI-paraphrased — plus how much time is left, e.g. `Google Form — 2h left! Hurry.` or `DBMS Exam — 24h left`. That way a glance at the inbox (or notification banner) tells you exactly what's due and how urgent it is, without opening the email. Only the one-line body underneath is optionally written by AI.
+The subject line always uses the item's **exact title** — never AI-paraphrased — plus how much time is left, e.g. `Google Form — 2h left! Hurry.` or `DBMS Exam — 24h left`. That way a glance at the inbox (or notification banner) tells you exactly what's due and how urgent it is, without opening the email. Only the one-line body underneath is optionally written by AI, and the email always also prints the exact IST date/time (📅 line) regardless of what the AI wrote, so the concrete deadline is never left out.
+
+## Daily digest (9:00 AM IST)
+
+One email a day, always exactly one (never duplicated with the old 8 AM version — that's been replaced). It has two deterministic, always-accurate sections — **Today** and **Next 48 hours** (no overlap between them) — each listing every item's exact title, priority, and IST date/time. An optional short AI-written opening line sits on top as a friendly framing ("Good morning! Focus on X first — everything else has more room."), but the task list and deadlines themselves are never AI-generated, so a bad or garbled completion can never misstate a date.
 
 ## Stack
 
 - **Frontend/backend:** Next.js (App Router) + Tailwind CSS
 - **Database:** Neon (serverless Postgres)
-- **Email:** Resend, with optional Groq-generated short one-line body (falls back to a plain static line if Groq is unset or fails — email delivery never depends on it). Two Groq API keys can be configured; if the first one's calls start failing (e.g. quota exhausted), the app automatically retries with the second.
-- **Scheduler:** an external cron service hits `/api/cron/reminders` every 5 minutes; Vercel's built-in Cron handles the once-daily 8 AM digest
+- **Email:** Resend, with optional Groq-generated short copy (reminder one-liner, digest opener). Falls back to a plain static line if Groq is unset or fails — email delivery never depends on it. Two Groq API keys can be configured; each key attempt is a full independent completion, never a partial resume, so a mid-generation key switch can't corrupt or splice text — if the first key's calls fail, the second one regenerates the whole thing from scratch.
+- **Scheduler:** an external cron service hits `/api/cron/reminders` every 5 minutes; Vercel's built-in Cron handles the once-daily 9 AM digest
 - **Auth:** a single shared passphrase (no accounts) — see below
 - **Timezone:** all scheduling and display uses IST (Asia/Kolkata)
 
@@ -90,7 +94,7 @@ See `.env.example` for the full list with comments. Summary:
 
 ### Confirming the daily digest cron
 
-Vercel's cron dashboard (**Project → Cron Jobs** tab) shows the `/api/cron/digest` job and its last run status. It's scheduled for `30 2 * * *` (UTC), which is 8:00 AM IST.
+Vercel's cron dashboard (**Project → Cron Jobs** tab) shows the `/api/cron/digest` job and its last run status. It's scheduled for `30 3 * * *` (UTC), which is 9:00 AM IST.
 
 ## Automatic cleanup
 
@@ -109,14 +113,14 @@ app/
   api/items/route.ts        GET list, POST create
   api/items/[id]/route.ts   DELETE, PATCH (priority)
   api/login/route.ts        Verifies passphrase, sets session cookie
-  api/cron/reminders/route.ts  Checks each item's own reminder intervals, sends due emails, deletes past events
-  api/cron/digest/route.ts     Sends the once-daily 8 AM IST digest
+  api/cron/reminders/route.ts  Checks each item's own reminder intervals, sends at most one catch-up-aware email per item, deletes past events
+  api/cron/digest/route.ts     Sends the once-daily 9 AM IST digest (Today + Next 48 hours)
 components/
   ScheduleApp.tsx            Client-side UI: header, next-up card, tabs, add form, item list, plan view
 lib/
   db.ts                      Neon queries
   email.ts                   Resend sending + subject/body composition
-  groq.ts                    Optional AI-generated short email body, with 2-key fallback
+  groq.ts                    Optional AI-generated short email copy, with full-retry 2-key fallback
   constants.ts                Reminder interval, priority options + labels (shared by backend and UI)
   time.ts                    IST <-> UTC conversion helpers
   auth.ts                    Session cookie hashing

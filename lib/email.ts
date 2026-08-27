@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { formatIst } from "./time";
-import { craftReminderBody } from "./groq";
-import { INTERVAL_LABELS } from "./constants";
+import { craftReminderBody, craftDigestSummary } from "./groq";
+import { INTERVAL_LABELS, PRIORITY_LABELS } from "./constants";
 import type { DigestItem } from "./db";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -57,33 +57,60 @@ export async function sendReminderEmail(
       <div style="font-family: sans-serif; font-size: 16px; line-height: 1.5;">
         <p><strong>${escapeHtml(item.title)}</strong></p>
         <p>${escapeHtml(bodyLine)}</p>
+        <p style="color: #666; font-size: 14px;">📅 ${escapeHtml(when)}</p>
       </div>
     `,
   });
 }
 
-export async function sendDigestEmail(items: DigestItem[], isToday: boolean) {
-  const heading = isToday ? "Today's schedule" : "Nothing today — here's what's coming up next";
-  const body =
-    items.length === 0
-      ? "<p>Nothing scheduled. Enjoy the free time.</p>"
-      : `<ul style="padding-left: 20px;">${items
-          .map(
-            (i) =>
-              `<li style="margin-bottom: 8px;"><strong>${escapeHtml(i.title)}</strong><br/>${formatIst(
-                i.event_datetime
-              )} IST</li>`
-          )
-          .join("")}</ul>`;
+function renderDigestList(items: DigestItem[]): string {
+  return `<ul style="padding-left: 20px; margin: 8px 0;">${items
+    .map(
+      (i) =>
+        `<li style="margin-bottom: 8px;"><strong>${escapeHtml(i.title)}</strong> <span style="color: #888; font-size: 12px;">(${PRIORITY_LABELS[i.priority]})</span><br/>${escapeHtml(
+          formatIst(i.event_datetime)
+        )} IST</li>`
+    )
+    .join("")}</ul>`;
+}
+
+export async function sendDigestEmail(todayItems: DigestItem[], upcoming48hItems: DigestItem[]) {
+  const totalCount = todayItems.length + upcoming48hItems.length;
+
+  const subject =
+    todayItems.length > 0
+      ? `Today: ${todayItems.length} task${todayItems.length > 1 ? "s" : ""}, ${upcoming48hItems.length} coming up`
+      : totalCount === 0
+      ? "Nothing due — clear day"
+      : `Nothing today — ${upcoming48hItems.length} coming up in 48h`;
+
+  let summary: string | null = null;
+  if (totalCount > 0) {
+    const summaryPrompt =
+      `Today: ${todayItems.map((i) => `"${i.title}" (${PRIORITY_LABELS[i.priority]} priority, ${formatIst(i.event_datetime)})`).join("; ") || "nothing"}. ` +
+      `Next 48h: ${upcoming48hItems.map((i) => `"${i.title}" (${PRIORITY_LABELS[i.priority]} priority)`).join("; ") || "nothing"}.`;
+    summary = await craftDigestSummary(summaryPrompt);
+  }
+
+  const todaySection =
+    todayItems.length > 0
+      ? `<h3 style="margin: 20px 0 4px;">Today</h3>${renderDigestList(todayItems)}`
+      : `<h3 style="margin: 20px 0 4px;">Today</h3><p style="color: #888;">Nothing scheduled today.</p>`;
+
+  const upcomingSection =
+    upcoming48hItems.length > 0
+      ? `<h3 style="margin: 20px 0 4px;">Next 48 hours</h3>${renderDigestList(upcoming48hItems)}`
+      : `<h3 style="margin: 20px 0 4px;">Next 48 hours</h3><p style="color: #888;">Nothing else coming up.</p>`;
 
   await resend.emails.send({
     from: FROM,
     to: TO,
-    subject: isToday ? "Today's schedule" : "Nothing today — here's what's next",
+    subject,
     html: `
       <div style="font-family: sans-serif; font-size: 16px; line-height: 1.5;">
-        <p><strong>${heading}</strong></p>
-        ${body}
+        ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
+        ${todaySection}
+        ${upcomingSection}
       </div>
     `,
   });

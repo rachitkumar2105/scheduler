@@ -17,6 +17,7 @@ export type DigestItem = {
   id: number;
   title: string;
   event_datetime: string;
+  priority: Priority;
 };
 
 export async function listUpcomingItems(): Promise<ScheduleItem[]> {
@@ -107,9 +108,10 @@ export async function tryClaimReminder(itemId: number, intervalMinutes: number):
   return rows.length > 0;
 }
 
-export async function getItemsForDigest(): Promise<DigestItem[]> {
+/** Items due sometime today (IST calendar day). */
+export async function getTodayDigestItems(): Promise<DigestItem[]> {
   const rows = await sql`
-    SELECT id, title, event_datetime
+    SELECT id, title, event_datetime, priority
     FROM schedule_items
     WHERE event_datetime >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'
       AND event_datetime < (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata'
@@ -118,12 +120,13 @@ export async function getItemsForDigest(): Promise<DigestItem[]> {
   return rows as DigestItem[];
 }
 
-export async function getItemsNext24Hours(): Promise<DigestItem[]> {
+/** Items due in the next 48 hours, excluding anything already in today's IST calendar day. */
+export async function getUpcoming48hDigestItems(): Promise<DigestItem[]> {
   const rows = await sql`
-    SELECT id, title, event_datetime
+    SELECT id, title, event_datetime, priority
     FROM schedule_items
-    WHERE event_datetime >= now()
-      AND event_datetime < now() + interval '24 hours'
+    WHERE event_datetime >= (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '1 day') AT TIME ZONE 'Asia/Kolkata'
+      AND event_datetime < now() + interval '48 hours'
     ORDER BY event_datetime ASC
   `;
   return rows as DigestItem[];
